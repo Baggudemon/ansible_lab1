@@ -1,0 +1,23 @@
+---
+- hosts: localhost
+  connection: local
+  gather_facts: no
+  vars:
+    region: eu-central-1
+    ansible_python_interpreter: /usr/bin/python3
+  tasks:
+    - name: Terminate Instances
+      ec2_instance:
+        instance_ids: "<place_instance_ids>"
+        state: absent
+
+    - name: Delete SG
+      ec2_group:
+        name: sg_wordpress_central
+        state: absent
+
+    - name: Delete Keypair
+      ec2_key:
+        region: "{{ region }}"
+        name: wordpress-apsydney
+        state: absent

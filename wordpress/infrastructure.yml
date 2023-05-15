@@ -1,0 +1,81 @@
+---
+- hosts: localhost
+  connection: local
+  gather_facts: no
+  vars:
+    region: eu-central-1
+    ansible_python_interpreter: /usr/bin/python3
+    keyname: wordpress-apsydney
+    allowed_ip: 0.0.0.0/0
+    instance_type: t2.micro
+    image: ami-004359656ecac6a95
+  tasks:
+    - name: create new EC2 key pair
+      tags: keypair
+      ec2_key:
+        name: "{{ keyname }}"
+        region: "{{ region }}"
+      register: mykey
+
+    - name: Save private key
+      copy: content="{{ mykey.key.private_key }}" dest="~/.ssh/{{ keyname }}.pem" mode=0600
+      when: mykey.changed
+
+    - name: create security group
+      tags: sg
+      ec2_group:
+        region: "{{ region }}"
+        name: sg_wordpress_central
+        description: security group for central webserver host
+        rules:
+          # allow ssh access from your ip address
+          - proto: tcp
+            from_port: 22
+            to_port: 22
+            cidr_ip: "{{ allowed_ip }}"
+          # allow http access from anywhere
+          - proto: tcp
+            from_port: 80
+            to_port: 80
+            cidr_ip: 0.0.0.0/0
+            # allow https access from anywhere
+          - proto: tcp
+            from_port: 443
+            to_port: 443
+            cidr_ip: 0.0.0.0/0
+        rules_egress:
+          - proto: all
+            cidr_ip: 0.0.0.0/0
+
+    - name: launch ec2 instance
+      tags: ec2
+      ec2:
+        region: "{{ region }}"
+        key_name: "{{ keyname }}"
+        instance_type: "{{ instance_type }}"
+        image: "{{ image }}"
+        wait: yes
+        group: sg_wordpress_central
+        # id: wordpress_launch_1
+        instance_tags:
+          Name: wordpress
+          class: wordpress
+      register: ec2
+
+    - name: associate new EIP for the instance
+      tags: eip
+      ec2_eip:
+        region: "{{ region }}"
+        instance_id: "{{ item.id }}"
+      with_items: ec2.instances
+      when: item.id is defined
+
+    - name: Wait for SSH to come up
+      delegate_to: "{{ ec2.instances[0].public_dns_name }}"
+      wait_for_connection:
+        delay: 60
+        sleep: 15
+        timeout: 40
+      vars:
+        ansible_user: ec2-user
+        ansible_ssh_private_key_file: ~/.ssh/wordpress-apsydney.pem

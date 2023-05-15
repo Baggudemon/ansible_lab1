@@ -1,0 +1,34 @@
+---
+- name: install mysql server
+  yum: name={{ item }} state=present
+  become: true
+  with_items:
+    - mariadb-devel
+    - mariadb-server
+    - python-devel
+    - libevent-devel
+    - gcc
+
+- name: install python2-pip
+  yum:
+    name: python2-pip
+    state: present
+- name: Upgrade pip
+  pip: name=pip state=latest
+  tags:
+    - packages
+- name: Ensure botocore and boto3 modules are installed
+  pip:
+    name: [ "boto3", "botocore"]
+    extra_args: "--user"
+
+- name: install mysql-python
+  become: true
+  pip: name=MySQL-python state=present
+
+- name: create mysql configuration file
+  template: src=my.cnf.j2 dest=/etc/my.cnf
+  notify: restart mysql
+
+- name: start mysql service
+  service: name=mariadb state=started enabled=true
